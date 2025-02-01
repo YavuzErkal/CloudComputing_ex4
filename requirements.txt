@@ -1,0 +1,4 @@
+kopf
+pyyaml
+kubernetes
+requests

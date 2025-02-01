@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: workload
+  labels:
+    kopf: "true"
+spec:
+  containers:
+    - name: sysbench
+      image: zyclonite/sysbench
+      command: ["sysbench"]
+      args:
+        - "cpu"
+        - "run"
+        - "--time=10"
+        - "--cpu-max-prime=20000"
+        - "--threads=2"
+
+#  This will be set in scheduler.py - set_pod_affinities()
+#  affinity:
+#    nodeAffinity:
+#      preferredDuringSchedulingIgnoredDuringExecution:
+#        - weight: 100
+#          preference:
+#            matchExpressions:
+#              - key: node_affinity
+#                operator: In
+#                values:
+#                  - "100"
+#        - weight: 50
+#          preference:
+#            matchExpressions:
+#              - key: node_affinity
+#                operator: In
+#                values:
+#                  - "50"
+#        - weight: 10
+#          preference:
+#            matchExpressions:
+#              - key: node_affinity
+#                operator: In
+#                values:
+#                  - "10"
