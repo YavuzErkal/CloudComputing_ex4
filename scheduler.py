@@ -1,5 +1,4 @@
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -10,7 +9,7 @@ import random
 import kopf
 from urllib.request import urlopen
 from kubernetes import client, config
-
+import asyncio
 
 # load environment variables
 load_dotenv()
@@ -29,9 +28,9 @@ scheduling_period = int(scheduling_period_str, 10)
 # Configure the Kubernetes client
 try:
     config.load_incluster_config()
-    print("Using in-cluster configuration")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Using in-cluster configuration")
 except config.config_exception.ConfigException:
-    print("Falling back to kube-config")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Falling back to kube-config")
     config.load_kube_config()
 
 # Initialize the Kubernetes API client
@@ -40,9 +39,14 @@ v1 = client.CoreV1Api()
 global carbon_intensity_data, node_metadata_list
 
 
+@kopf.on.startup()
+async def startup_fn(**kwargs):
+    asyncio.create_task(run_scheduler_loop(period=scheduling_period, total_run_count=180, is_carbon_aware=True))
+
+
 @kopf.on.create('pods', labels={'kopf': 'true'})
-def create_pod_listener(spec, meta, status, **kwargs):
-    print('create_pod_listener working')
+def pod_handler(spec, meta, status, **kwargs):
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] kopf pod_handler reacting to pod creation...")
 
     # Fetch all nodes
     nodes = v1.list_node().items
@@ -84,10 +88,8 @@ def create_pod_listener(spec, meta, status, **kwargs):
     node_chosen_for_scheduling['workload'] = workload_name
 
     # Log the information
-    print('====================================')
-    print(f'recommended pod placement: {node_with_highest_affinity}')
-    print(f'actual pod placement: {node_chosen_for_scheduling}')
-    print('====================================')
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] recommended pod placement: {node_with_highest_affinity}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] actual pod placement: {node_chosen_for_scheduling}")
 
     return
 
@@ -133,17 +135,15 @@ def label_nodes():
 
         try:
             # Apply the body with the labels to the node
-            # v1.patch_node(node_name, body)
             response = v1.patch_node(node_name, body)
-            # print(f"Successfully labeled {node_name}: {response.metadata.labels}")
-
             filtered_labels = {key: response.metadata.labels[key] for key in
                                ["carbon_intensity", "kubernetes.io/hostname", "node_affinity", "region"] if
                                key in response.metadata.labels}
 
-            print(f"Successfully labeled {node_name}: {filtered_labels}")
+            print(
+                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Successfully labeled {node_name}: {filtered_labels}")
         except client.exceptions.ApiException as e:
-            print(f"Error labeling {node_name}: {e}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Error labeling {node_name}: {e}")
 
 
 def set_pod_affinities(pod_definition):
@@ -177,7 +177,8 @@ def set_pod_affinities(pod_definition):
     ]
 
 
-def schedule_workload(count: int):
+async def schedule_workload(count: int, is_carbon_aware: bool):
+    print('========================================================================')
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Scheduling workload {count}...")
 
     # label nodes with region, carbon_intensity, node_affinity
@@ -198,7 +199,8 @@ def schedule_workload(count: int):
     ]
 
     # set affinity preferences
-    set_pod_affinities(pod_definition=workload)
+    if is_carbon_aware:
+        set_pod_affinities(pod_definition=workload)
 
     # Save the updated pod YAML to a new file
     new_file_name = f"workload-{count}.yaml"
@@ -206,8 +208,9 @@ def schedule_workload(count: int):
         yaml.safe_dump(workload, file, default_flow_style=False)
 
     try:
-        # Deploy the pod using kubectl
-        subprocess.run(["kubectl", "apply", "-f", new_file_name], check=True)
+        # Deploy the pod using kubectl asynchronously
+        process = await asyncio.create_subprocess_exec("kubectl", "apply", "-f", new_file_name)
+        await process.communicate()  # Wait for kubectl process to complete
     finally:
         # Delete the temporary YAML file
         if os.path.exists(new_file_name):
@@ -215,7 +218,9 @@ def schedule_workload(count: int):
 
 
 def run_scheduler(period, total_run_count):
-    print(f"Started scheduling pods with a period of {period} seconds...")
+    print(
+        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Started scheduling pods with a period of {period} seconds...")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Carbon aware scheduling")
     run_count = 1
     while run_count <= total_run_count:
         schedule_workload(run_count)
@@ -223,6 +228,18 @@ def run_scheduler(period, total_run_count):
         time.sleep(period)
 
 
-# Execute run_scheduler - starting point of the scheduler
-run_scheduler(scheduling_period, total_run_count=180)
+async def run_scheduler_loop(period, total_run_count, is_carbon_aware):
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Started scheduling pods with a period of {period} seconds...")
+    log_text = "Carbon aware" if is_carbon_aware else "Default"
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {log_text} scheduling.")
+    run_count = 1
+    while run_count <= total_run_count:
+        asyncio.create_task(schedule_workload(count=run_count, is_carbon_aware=is_carbon_aware))
+        await asyncio.sleep(period)  # Non-blocking sleep
+        run_count += 1
 
+
+# Start Kopf asynchronously
+if __name__ == "__main__":
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting Kopf...")
+    kopf.run()

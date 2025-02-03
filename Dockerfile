@@ -18,6 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Command to run the scheduler.py with kopf
-CMD ["kopf", "run", "scheduler.py"]
+# Run python scheduler.py
+CMD ["python", "scheduler.py"]
 
