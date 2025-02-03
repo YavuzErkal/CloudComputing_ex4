@@ -1,26 +1,38 @@
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime
-
+from dotenv import load_dotenv
 import yaml
 import json
 import random
 import kopf
 from urllib.request import urlopen
 from kubernetes import client, config
-import logging
 
-# get the kopf logger
-kopf_logger = logging.getLogger("kopf.objects")
 
-# Set the logging level to WARNING (or ERROR) to suppress INFO logs
-kopf_logger.setLevel(logging.WARNING)
+# load environment variables
+load_dotenv()
 
-scheduling_period = int(os.getenv("SCHEDULING_PERIOD", "10"), 10)
+# Read SCHEDULING_PERIOD from the environment
+scheduling_period_str = os.getenv("SCHEDULING_PERIOD")
+
+# Exit with error if SCHEDULING_PERIOD cannot be read
+if scheduling_period_str is None:
+    print("Error: SCHEDULING_PERIOD is not set in the .env file.", file=sys.stderr)
+    sys.exit(1)  # Exit with error code 1
+
+# Convert SCHEDULING_PERIOD to integer with base 10
+scheduling_period = int(scheduling_period_str, 10)
 
 # Configure the Kubernetes client
-config.load_kube_config()
+try:
+    config.load_incluster_config()
+    print("Using in-cluster configuration")
+except config.config_exception.ConfigException:
+    print("Falling back to kube-config")
+    config.load_kube_config()
 
 # Initialize the Kubernetes API client
 v1 = client.CoreV1Api()
@@ -30,6 +42,8 @@ global carbon_intensity_data, node_metadata_list
 
 @kopf.on.create('pods', labels={'kopf': 'true'})
 def create_pod_listener(spec, meta, status, **kwargs):
+    print('create_pod_listener working')
+
     # Fetch all nodes
     nodes = v1.list_node().items
 
@@ -65,6 +79,7 @@ def create_pod_listener(spec, meta, status, **kwargs):
         None
     )
 
+    # set the workload name
     node_with_highest_affinity['workload'] = workload_name
     node_chosen_for_scheduling['workload'] = workload_name
 
@@ -199,14 +214,15 @@ def schedule_workload(count: int):
             os.remove(new_file_name)
 
 
-def run_scheduler(period):
+def run_scheduler(period, total_run_count):
     print(f"Started scheduling pods with a period of {period} seconds...")
-    i = 1
-    while i <= 180:
-        schedule_workload(i)
-        i += 1
+    run_count = 1
+    while run_count <= total_run_count:
+        schedule_workload(run_count)
+        run_count += 1
         time.sleep(period)
 
 
-run_scheduler(scheduling_period)
+# Execute run_scheduler - starting point of the scheduler
+run_scheduler(scheduling_period, total_run_count=180)
 

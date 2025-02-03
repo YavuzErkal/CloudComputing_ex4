@@ -1,0 +1,46 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scheduler-account
+  namespace: default
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: scheduler-role
+rules:
+  # Allow the scheduler to list, watch, and get Pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Allow the scheduler to list, watch, and get Nodes
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "patch"]
+
+  # Add permissions for CRDs (Custom Resource Definitions)
+  - apiGroups: [ "apiextensions.k8s.io" ]
+    resources: [ "customresourcedefinitions" ]
+    verbs: [ "get", "list", "watch" ]
+
+  # Allow creating Events for the kopf method
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "create" ]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: scheduler-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: scheduler-account
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: scheduler-role
+  apiGroup: rbac.authorization.k8s.io

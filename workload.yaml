@@ -5,6 +5,7 @@ metadata:
   labels:
     kopf: "true"
 spec:
+  restartPolicy: Never
   containers:
     - name: sysbench
       image: zyclonite/sysbench

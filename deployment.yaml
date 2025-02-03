@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: scheduler-operator
+  template:
+    metadata:
+      labels:
+        application: scheduler-operator
+    spec:
+      serviceAccountName: scheduler-account
+      containers:
+      - name: scheduler
+        image: yavuzerkal/scheduler:test-3
