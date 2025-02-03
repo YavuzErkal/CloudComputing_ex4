@@ -36,14 +36,19 @@ except config.config_exception.ConfigException:
 # Initialize the Kubernetes API client
 v1 = client.CoreV1Api()
 
+# Define global variables
 global carbon_intensity_data, node_metadata_list
 
 
+# Runs on Kopf startup and schedules the asynchronous
+# execution of `run_scheduler_loop()`. It launches the workload scheduling
+# loop in the background without blocking Kopf's event loop.
 @kopf.on.startup()
 async def startup_fn(**kwargs):
     asyncio.create_task(run_scheduler_loop(period=scheduling_period, total_run_count=180, is_carbon_aware=True))
 
 
+# kopf handler which runs on each pod creation with the label kopf: true
 @kopf.on.create('pods', labels={'kopf': 'true'})
 def pod_handler(spec, meta, status, **kwargs):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] kopf pod_handler reacting to pod creation...")
@@ -51,7 +56,7 @@ def pod_handler(spec, meta, status, **kwargs):
     # Fetch all nodes
     nodes = v1.list_node().items
 
-    # Extract required node details
+    # Extract node details
     node_details = []
     for node in nodes:
         labels = node.metadata.labels
@@ -65,6 +70,7 @@ def pod_handler(spec, meta, status, **kwargs):
             "ip_address": ip_address,
         })
 
+    # fetch workload name from pods metadata
     workload_name = meta['name']
 
     # Find the node with the highest node_affinity
@@ -94,7 +100,9 @@ def pod_handler(spec, meta, status, **kwargs):
     return
 
 
+# labels node with the carbon affinity and node affinity in inverse relation
 def label_nodes():
+    # access global variables
     global carbon_intensity_data, node_metadata_list
 
     # Fetch the carbon emission data
@@ -102,6 +110,7 @@ def label_nodes():
     response = urlopen(url)
     carbon_intensity_data = json.loads(response.read().decode('utf-8'))
 
+    # fetch k8s nodes
     nodes = v1.list_node().items
     node_names = [node.metadata.name for node in nodes]
 
@@ -193,6 +202,8 @@ async def schedule_workload(count: int, is_carbon_aware: bool):
 
     # set execution time randomly between 20-60 seconds
     execution_time = random.randint(20, 60)
+
+    # set the randomly chosen time in the workload.yaml
     workload["spec"]["containers"][0]["args"] = [
         f"--time={execution_time}" if arg.startswith("--time=") else arg
         for arg in workload["spec"]["containers"][0]["args"]
@@ -210,24 +221,14 @@ async def schedule_workload(count: int, is_carbon_aware: bool):
     try:
         # Deploy the pod using kubectl asynchronously
         process = await asyncio.create_subprocess_exec("kubectl", "apply", "-f", new_file_name)
-        await process.communicate()  # Wait for kubectl process to complete
+        await process.communicate()
     finally:
         # Delete the temporary YAML file
         if os.path.exists(new_file_name):
             os.remove(new_file_name)
 
 
-def run_scheduler(period, total_run_count):
-    print(
-        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Started scheduling pods with a period of {period} seconds...")
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Carbon aware scheduling")
-    run_count = 1
-    while run_count <= total_run_count:
-        schedule_workload(run_count)
-        run_count += 1
-        time.sleep(period)
-
-
+# Asynchronously schedules workloads at a fixed interval without blocking execution.
 async def run_scheduler_loop(period, total_run_count, is_carbon_aware):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Started scheduling pods with a period of {period} seconds...")
     log_text = "Carbon aware" if is_carbon_aware else "Default"
