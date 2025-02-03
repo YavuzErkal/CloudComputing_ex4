@@ -1,6 +1,8 @@
+# Chat GPTs help is used to enable async execution through asyncio
+
+# import required packages
 import os
 import sys
-import time
 from datetime import datetime
 from dotenv import load_dotenv
 import yaml

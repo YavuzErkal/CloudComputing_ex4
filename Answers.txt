@@ -1,0 +1,62 @@
+1)  Since this is an artificial scenario, you can simply assume that each active pod consumes 200W of electricity. As workloads run 40s on average and we have 180 workloads in total, the expected overall energy usage is 40s * 180 * 200W = 400 Wh. What is the carbon footprint? 
+
+
+The general formula for calculating the carbon footprint is: 
+Demand X energy efficiency X energy carbon Intensity X time
+
+
+Here carbon footprint (CF) can be calculated using:
+CF = (P x T x N / 1000 ) x CI
+- P = Power consumption per pod (W)
+- T = Execution time per pod (seconds)
+- N = Total number of pods
+- CI = Average carbon intensity (gCO2/kWh)
+
+
+1.1) In our experiment the average carbon intensity for the carbon aware experiment is 207,9753333
+Here the values are:
+- P = 200W
+- T = 40s
+- N = 180
+- CI = 207,9753333 gCO2/kWh 
+
+Substituting the values:
+CF = (400 Wh / 1000) * 207.9753333 gCO2/kWh = 83.19 gCO2
+Thus, the total carbon footprint is **83.19 gCO2**. 
+
+
+1.2) For the random experiment the average carbon intensity is 297,8840556
+Here the values are:
+- P = 200W
+- T = 40s
+- N = 180
+- CI =297,8840556 gCO2/kWh —--------------
+
+Substituting the values:
+(400 Wh / 1000) * 297.8840556 gCO2/kWh = 119.15 gCO2
+Thus, the total carbon footprint is **119.15 gCO2**. 
+
+
+2)  Think about suitable ways for interpreting the recorded information and comparing them against each other (e.g. rank nodes based on carbon intensity forecasts and compute a histogram; estimate the normalized savings in carbon intensity, etc.). How did the two strategies perform? 
+
+When we look at the carbon aware strategy and the default (random) strategy we see that carbon aware strategy outperformed the default strategy by achieving a 30% reduction in carbon footprint. (297.88 gCO2/kWh to 207.98 gCO2/kWh) 
+  
+Since we obtain the carbon intensity values for both strategies (carbon awareness and default) at the same time (parallel), we can easily compare them. 
+The histogram (the histogram is attached in the delivered assignment folder) shows that carbon-aware strategy distributed workloads to lower intensity nodes whereas default strategy placed them on higher intensity nodes. The graph shows that carbon aware strategy is leading to a more sustainable and environmentally conscious distribution. 
+
+3)  Have there been situations where a Pod was not placed as intended? If so, what might be the reasons? If not, is this even possible? 
+
+When carbon-aware planning is used, we expect pods to be assigned to nodes with lower carbon intensity. 
+
+We have not experienced a situation where the pod is not placed as intended.
+However, this could happen in a real life scenario and here is why:
+-Using “Preferred” instead of “Required” for Node Affinity, here Kubernetes does not have to choose the high affinity node, it is just prioritized. 
+-Node may be full. If node capacity is full, Kubernetes may have redirected it to another node. 
+-According to the current resource utilization of CPU/RAM, the available node may have been selected. 
+
+4) Think about applying this in practice: What might go wrong, what are things we did not take into consideration?
+
+-Accuracy of the real-time carbon data could not be accurate
+-The carbon intensity data we obtain may be delayed or misleading
+-Kubernetes can choose another node if nodes with low carbon affinity are full
+-Efficient/optimized systems developed due to the rebound effect can increase energy consumption (Jevon's paradox)
